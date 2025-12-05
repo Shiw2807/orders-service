@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Payments Service - Charge Endpoint Contract",
+  "description": "API contract for POST /api/payments/charge",
+  
+  "endpoint": {
+    "path": "/api/payments/charge",
+    "method": "POST",
+    "service": "payments-service",
+    "version": "1.0.0"
+  },
+  
+  "authentication": {
+    "required": true,
+    "type": "bearer",
+    "header": "Authorization",
+    "note": "VIOLATION: payments-service currently does NOT enforce this!"
+  },
+  
+  "request": {
+    "type": "object",
+    "required": ["order_id", "amount", "currency", "customer_id", "payment_method"],
+    "properties": {
+      "order_id": {
+        "type": "string",
+        "description": "Unique order identifier",
+        "pattern": "^[a-zA-Z0-9-]+$",
+        "example": "order-123"
+      },
+      "amount": {
+        "type": "number",
+        "description": "Amount to charge",
+        "minimum": 0.01,
+        "maximum": 1000000,
+        "example": 99.99
+      },
+      "currency": {
+        "type": "string",
+        "description": "ISO 4217 currency code",
+        "enum": ["USD", "EUR", "GBP", "JPY", "CAD", "AUD"],
+        "default": "USD",
+        "example": "USD"
+      },
+      "customer_id": {
+        "type": "string",
+        "description": "Customer identifier",
+        "pattern": "^cust-[a-zA-Z0-9]+$",
+        "example": "cust-456"
+      },
+      "payment_method": {
+        "type": "string",
+        "description": "Payment method to use",
+        "enum": ["card", "bank_transfer", "paypal", "apple_pay", "google_pay"],
+        "example": "card"
+      }
+    },
+    "additionalProperties": false
+  },
+  
+  "response": {
+    "success": {
+      "status_code": 200,
+      "type": "object",
+      "required": ["id", "order_id", "amount", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique charge identifier",
+          "pattern": "^ch_[a-f0-9]+$",
+          "example": "ch_abc123def456"
+        },
+        "order_id": {
+          "type": "string",
+          "description": "Associated order ID"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Charged amount"
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency used"
+        },
+        "customer_id": {
+          "type": "string",
+          "description": "Customer who was charged"
+        },
+        "payment_method": {
+          "type": "string",
+          "description": "Payment method used"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["succeeded", "pending", "failed"],
+          "description": "Charge status"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the charge was created"
+        }
+      }
+    },
+    "errors": {
+      "400": {
+        "description": "Bad Request - Invalid input",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "description": "Unauthorized - Missing or invalid auth",
+        "note": "SHOULD return this but currently doesn't!",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "type": "string",
+              "example": "Authorization required"
+            }
+          }
+        }
+      },
+      "500": {
+        "description": "Internal Server Error",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  
+  "examples": {
+    "request": {
+      "order_id": "order-123",
+      "amount": 99.99,
+      "currency": "USD",
+      "customer_id": "cust-456",
+      "payment_method": "card"
+    },
+    "response_success": {
+      "id": "ch_abc123def456",
+      "order_id": "order-123",
+      "amount": 99.99,
+      "currency": "USD",
+      "customer_id": "cust-456",
+      "payment_method": "card",
+      "status": "succeeded",
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  },
+  
+  "breaking_changes": {
+    "history": [],
+    "planned": []
+  },
+  
+  "consumers": [
+    {
+      "repo": "orders-service",
+      "file": "src/services/orderProcessor.js",
+      "function": "processPayment",
+      "issues": [
+        "Does not send Authorization header",
+        "Hardcoded localhost URL"
+      ]
+    }
+  ]
+}
