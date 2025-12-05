@@ -1,0 +1,197 @@
+# Qodo Merge Configuration for orders-service
+# Cross-repo analysis configuration for enterprise microservices
+
+version: 1
+
+# Repository metadata
+metadata:
+  name: orders-service
+  type: microservice
+  team: backend
+  language: javascript
+  framework: express
+
+# Dependencies on other repositories
+dependencies:
+  # Shared utility library
+  - repo: Shiw2807/shared-utils
+    type: library
+    version: "^2.0.0"
+    import_patterns:
+      - "require('shared-utils')"
+      - "require(\"shared-utils\")"
+      - "from 'shared-utils'"
+    tracked_exports:
+      - name: formatCurrency
+        expected_signature: "formatCurrency(amount: number, locale: string)"
+        breaking_change_alert: true
+      - name: validateOrderTotal
+        expected_signature: "validateOrderTotal(total: number)"
+      - name: calculateTax
+        expected_signature: "calculateTax(amount: number, taxRate?: number)"
+      - name: generateOrderId
+        expected_signature: "generateOrderId()"
+
+  # Downstream service dependency
+  - repo: Shiw2807/payments-service
+    type: service
+    relationship: consumer
+    api_contracts:
+      - endpoint: POST /api/payments/charge
+        method: POST
+        request_schema:
+          type: object
+          required:
+            - order_id
+            - amount
+            - currency
+            - customer_id
+            - payment_method
+          properties:
+            order_id:
+              type: string
+            amount:
+              type: number
+            currency:
+              type: string
+            customer_id:
+              type: string
+            payment_method:
+              type: string
+        response_schema:
+          type: object
+          properties:
+            id:
+              type: string
+            status:
+              type: string
+            amount:
+              type: number
+        auth_required: true  # Flag: payments-service should require auth
+        
+      - endpoint: POST /api/payments/refund
+        method: POST
+        auth_required: true
+
+# Cross-repo analysis settings
+cross_repo_analysis:
+  enabled: true
+  check_breaking_changes: true
+  check_api_contracts: true
+  check_dependency_versions: true
+  
+  # Alert when these patterns change
+  watch_patterns:
+    - "src/services/orderProcessor.js"  # Makes cross-service calls
+    - "src/utils/formatting.js"          # Uses shared-utils
+    - "src/api/**/*.js"                  # API endpoints
+
+# Code review settings
+review:
+  # Security checks
+  security:
+    enabled: true
+    check_hardcoded_secrets: true
+    check_sql_injection: true
+    check_exposed_credentials: true
+    secret_patterns:
+      - "API_KEY"
+      - "SECRET"
+      - "PASSWORD"
+      - "TOKEN"
+      - "CREDENTIAL"
+    
+  # Architecture checks
+  architecture:
+    enabled: true
+    check_service_boundaries: true
+    check_coupling: true
+    allowed_external_calls:
+      - "payments-service"
+    disallowed_patterns:
+      - pattern: "http.request.*localhost"
+        message: "Use service discovery instead of hardcoded URLs"
+      - pattern: "process.env.API_KEY.*res.json"
+        message: "Never expose API keys in responses"
+
+  # Code quality checks
+  quality:
+    enabled: true
+    check_duplicated_logic: true
+    check_inconsistent_patterns: true
+    max_function_length: 50
+    max_file_length: 500
+    
+  # Breaking change detection
+  breaking_changes:
+    enabled: true
+    check_api_response_format: true
+    check_function_signatures: true
+    check_export_changes: true
+
+# Duplication detection across repos
+duplication:
+  enabled: true
+  cross_repo: true
+  threshold: 0.8  # 80% similarity
+  tracked_functions:
+    - validateOrderTotal
+    - calculateTax
+    - formatCurrency
+    - validateEmail
+    - validatePhone
+  report_locations:
+    - shared-utils/src/index.ts
+    - payments-service/src/utils/validation.py
+    - payments-service/src/utils/formatting.py
+
+# PR size limits
+pr_limits:
+  max_files_changed: 20
+  max_lines_changed: 500
+  warn_on_mixed_changes: true  # Style + Logic + Docs in same PR
+  require_split_for:
+    - style_and_logic
+    - feature_and_refactor
+
+# Custom review rules
+custom_rules:
+  - id: no-direct-service-calls
+    description: "Use message queue or event bus instead of direct HTTP calls"
+    pattern: "http.request|https.request|fetch\\("
+    severity: warning
+    files:
+      - "src/services/**/*.js"
+      
+  - id: use-shared-utils
+    description: "Use shared-utils instead of local implementation"
+    pattern: "function validateOrderTotal|function calculateTax|function formatCurrency"
+    severity: error
+    message: "This function exists in shared-utils. Import from there instead."
+    
+  - id: no-hardcoded-urls
+    description: "Use environment variables for service URLs"
+    pattern: "localhost:\\d{4}|127.0.0.1:\\d{4}"
+    severity: error
+    
+  - id: require-auth-header
+    description: "External service calls must include authorization"
+    pattern: "headers:\\s*\\{[^}]*\\}"
+    negative_pattern: "Authorization|authorization"
+    severity: warning
+    message: "HTTP request missing Authorization header"
+
+# Notifications
+notifications:
+  breaking_changes:
+    notify_repos:
+      - Shiw2807/payments-service
+    channels:
+      - github_comment
+      - slack  # if configured
+      
+  security_issues:
+    severity_threshold: medium
+    channels:
+      - github_comment
+      - email  # if configured
